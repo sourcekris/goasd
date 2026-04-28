@@ -5,7 +5,6 @@ Golang port of ASD Archiver version 0.1.5 (1997)
 - **Compression**: Uses a sliding window (LZ77-style) compression algorithm with a 4KB buffer.
 - **Integrity**: CRC32 checksums for every file in the archive to ensure data integrity.
 - **Metadata**: Stores original filenames, file sizes, timestamps, and file attributes.
-- **SFX Support**: Capable of creating self-extracting archives by prepending platform-specific executable stubs.
 - **Variable Compression**: Supports Fast, Normal, and Maximum compression levels via hash table depth adjustment.
 - **Compatibility**: Designed to handle long filenames (standard for late 90s systems).
 
@@ -17,7 +16,6 @@ Golang port of ASD Archiver version 0.1.5 (1997)
 - `x`: Extract files from archive.
 - `l`: List files in archive.
 - `t`: Test files in archive (perform CRC check without extracting).
-- `s`: Convert an existing ASD archive to an SFX executable.
 - `h`: Show help and usage examples.
 
 #### Switches
