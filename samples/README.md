@@ -1,0 +1,1 @@
+These are samples originally compressed with the original version of the ASD Archiver and downloaded from https://sembiance.com/fileFormatSamples/archive/asdArchive/
