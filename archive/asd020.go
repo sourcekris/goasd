@@ -71,6 +71,7 @@ type HuffTree struct {
 	Count        []uint32
 	HighTree     []int
 	LowTree      []int
+	FromTree     []int
 	Counted      []bool
 	HuffCounter  int
 	ScaleCounter int
@@ -84,6 +85,7 @@ func NewHuffTree(numCodes, rehuffFactor, rescaleFactor int) *HuffTree {
 		Count:    make([]uint32, numCodes*2),
 		HighTree: make([]int, numCodes),
 		LowTree:  make([]int, numCodes),
+		FromTree: make([]int, numCodes*2),
 		Counted:  make([]bool, numCodes*2),
 		Rehuff:   rehuffFactor * numCodes,
 		Rescale:  rescaleFactor * numCodes,
@@ -127,6 +129,8 @@ func (t *HuffTree) BuildTree() {
 
 		t.LowTree[nextNode-t.NumCodes] = idx1
 		t.HighTree[nextNode-t.NumCodes] = idx2
+		t.FromTree[idx1] = nextNode
+		t.FromTree[idx2] = nextNode
 		nextNode++
 	}
 }

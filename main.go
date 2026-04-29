@@ -18,7 +18,6 @@ type Options struct {
 	Max       bool
 	NoAttrs   bool
 	Recursive bool
-	V2        bool
 }
 
 func usage() {
@@ -32,7 +31,7 @@ func usage() {
 	fmt.Println("\n<Switches:>")
 	fmt.Println("  -y = Assume YES on all queries      -f = Set fast compression mode")
 	fmt.Println("  -m = Set maximum compression mode   -a = disable attributes")
-	fmt.Println("  -r = Include subdirectories         -2 = Use 0.2.0 compression format (ASD02 - not yet implemented for compression)")
+	fmt.Println("  -r = Include subdirectories")
 }
 
 func main() {
@@ -53,7 +52,6 @@ func main() {
 	optM := fs.Bool("m", false, "Set maximum compression mode")
 	optA := fs.Bool("a", false, "Disable attributes")
 	optR := fs.Bool("r", false, "Include subdirectories")
-	opt2 := fs.Bool("2", false, "Use 0.2.0 compression format (ASD02 - not yet implemented for compression)")
 
 	// Parse flags starting from the 3rd argument (after the executable and the command)
 	fs.Parse(os.Args[2:])
@@ -80,7 +78,6 @@ func main() {
 		Max:       *optM,
 		NoAttrs:   *optA,
 		Recursive: *optR,
-		V2:        *opt2,
 	}
 
 	switch cmd {
@@ -98,11 +95,6 @@ func main() {
 }
 
 func addArchive(name string, files []string, opts Options) {
-	if opts.V2 {
-		fmt.Println("Error: ASD 0.2.0 compression is not yet implemented. Please omit the -2 flag to compress using V1.")
-		return
-	}
-
 	hashDeep := 300 // Default
 	asdExtra := 20  // Default
 
@@ -201,7 +193,7 @@ func addArchive(name string, files []string, opts Options) {
 
 	tmp.Seek(0, 0)
 	fmt.Printf("Compressing %d files...\n", len(entries))
-	
+
 	if err := archive.Compress(out, tmp, asdExtra, hashDeep); err != nil {
 		fmt.Printf("Error during compression: %v\n", err)
 		return
