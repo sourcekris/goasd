@@ -33,3 +33,4 @@ go.work.sum
 
 goasd.exe
 test_out/
+tests/
