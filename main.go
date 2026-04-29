@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"hash/crc32"
 	"io"
@@ -11,8 +12,16 @@ import (
 	"github.com/sewid/goasd/archive"
 )
 
+type Options struct {
+	AssumeYes bool
+	Fast      bool
+	Max       bool
+	NoAttrs   bool
+	Recursive bool
+}
+
 func usage() {
-	fmt.Println("ASD - archiver version 0.1.5 (Golang Port)")
+	fmt.Println("ASD - archiver version 0.1.5 (Golang Port with 0.2.0 Decompression)")
 	fmt.Println("Usage:    goasd <option> [<switch(es)>] <arc name> <files...>")
 	fmt.Println("Examples: goasd a -m archive.asd *.exe, goasd x -y arch.asd, goasd l arch.asd")
 	fmt.Println("\n<Options:>")
@@ -22,79 +31,104 @@ func usage() {
 	fmt.Println("\n<Switches:>")
 	fmt.Println("  -y = Assume YES on all queries      -f = Set fast compression mode")
 	fmt.Println("  -m = Set maximum compression mode   -a = disable attributes")
+	fmt.Println("  -r = Include subdirectories")
 }
 
 func main() {
-	if len(os.Args) < 3 {
+	if len(os.Args) < 2 {
 		usage()
 		return
 	}
 
-	option := strings.ToLower(os.Args[1])
-	var switches []string
-	var archiveName string
-	var files []string
-
-	argIdx := 2
-	for argIdx < len(os.Args) {
-		arg := os.Args[argIdx]
-		if strings.HasPrefix(arg, "-") {
-			switches = append(switches, strings.ToLower(arg))
-			argIdx++
-		} else {
-			break
-		}
-	}
-
-	if argIdx < len(os.Args) {
-		archiveName = os.Args[argIdx]
-		argIdx++
-	}
-
-	if argIdx < len(os.Args) {
-		files = os.Args[argIdx:]
-	}
-
-	if archiveName == "" && option != "h" {
+	cmd := strings.ToLower(os.Args[1])
+	if cmd == "h" {
 		usage()
 		return
 	}
 
-	// Ensure archive name has .asd extension if not present
+	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+	optY := fs.Bool("y", false, "Assume YES on all queries")
+	optF := fs.Bool("f", false, "Set fast compression mode")
+	optM := fs.Bool("m", false, "Set maximum compression mode")
+	optA := fs.Bool("a", false, "Disable attributes")
+	optR := fs.Bool("r", false, "Include subdirectories")
+
+	// Parse flags starting from the 3rd argument (after the executable and the command)
+	fs.Parse(os.Args[2:])
+	args := fs.Args()
+
+	if len(args) == 0 {
+		usage()
+		return
+	}
+
+	archiveName := args[0]
 	if !strings.Contains(archiveName, ".") {
 		archiveName += ".asd"
 	}
 
-	switch option {
+	var files []string
+	if len(args) > 1 {
+		files = args[1:]
+	}
+
+	opts := Options{
+		AssumeYes: *optY,
+		Fast:      *optF,
+		Max:       *optM,
+		NoAttrs:   *optA,
+		Recursive: *optR,
+	}
+
+	switch cmd {
 	case "a":
-		addArchive(archiveName, files, switches)
+		addArchive(archiveName, files, opts)
 	case "l":
 		listArchive(archiveName)
 	case "x":
 		extractArchive(archiveName, false)
 	case "t":
 		extractArchive(archiveName, true)
-	case "h":
-		usage()
 	default:
-		fmt.Printf("Option '%s' not yet fully implemented in this port.\n", option)
+		fmt.Printf("Option '%s' not yet fully implemented in this port.\n", cmd)
 	}
 }
 
-func addArchive(name string, files []string, switches []string) {
+func addArchive(name string, files []string, opts Options) {
 	hashDeep := 300 // Default
 	asdExtra := 20  // Default
 
-	for _, s := range switches {
-		if s == "-f" {
-			hashDeep = 20
-		} else if s == "-m" {
-			hashDeep = 4095
-		}
+	if opts.Fast {
+		hashDeep = 20
+	} else if opts.Max {
+		hashDeep = 4095
 	}
 
 	var entries []archive.FileEntry
 	var fullPaths []string
+
+	addFile := func(path string, info os.FileInfo) error {
+		if info.IsDir() {
+			return nil
+		}
+		fmt.Printf("Adding: %s\n", path)
+		crc, err := calculateCRC(path)
+		if err != nil {
+			return err
+		}
+		
+		archiveName := filepath.ToSlash(path)
+		entries = append(entries, archive.FileEntry{
+			Name:      archiveName,
+			Size:      uint32(info.Size()),
+			CRC:       crc,
+			Time:      0,
+			Attribute: 32,
+		})
+		fullPaths = append(fullPaths, path)
+		return nil
+	}
+
 	for _, pattern := range files {
 		matches, err := filepath.Glob(pattern)
 		if err != nil {
@@ -103,23 +137,20 @@ func addArchive(name string, files []string, switches []string) {
 		}
 		for _, m := range matches {
 			info, err := os.Stat(m)
-			if err != nil || info.IsDir() {
-				continue
-			}
-			fmt.Printf("Adding: %s\n", m)
-			crc, err := calculateCRC(m)
 			if err != nil {
-				fmt.Printf("Error calculating CRC for %s: %v\n", m, err)
 				continue
 			}
-			entries = append(entries, archive.FileEntry{
-				Name:      filepath.Base(m),
-				Size:      uint32(info.Size()),
-				CRC:       crc,
-				Time:      0,
-				Attribute: 32,
-			})
-			fullPaths = append(fullPaths, m)
+
+			if info.IsDir() && opts.Recursive {
+				filepath.Walk(m, func(path string, info os.FileInfo, err error) error {
+					if err != nil {
+						return err
+					}
+					return addFile(path, info)
+				})
+			} else {
+				addFile(m, info)
+			}
 		}
 	}
 
@@ -135,13 +166,13 @@ func addArchive(name string, files []string, switches []string) {
 	}
 	defer out.Close()
 
-	header := &archive.ArchiveHeader{Files: entries}
+	header := &archive.ArchiveHeader{Files: entries, Version: 1}
+
 	if err := header.WriteHeader(out); err != nil {
 		fmt.Printf("Error writing header: %v\n", err)
 		return
 	}
 
-	// Create a temporary concatenation of all files to compress
 	tmp, err := os.CreateTemp("", "goasd-solid")
 	if err != nil {
 		fmt.Printf("Error creating temp file: %v\n", err)
@@ -162,6 +193,7 @@ func addArchive(name string, files []string, switches []string) {
 
 	tmp.Seek(0, 0)
 	fmt.Printf("Compressing %d files...\n", len(entries))
+
 	if err := archive.Compress(out, tmp, asdExtra, hashDeep); err != nil {
 		fmt.Printf("Error during compression: %v\n", err)
 		return
@@ -184,7 +216,6 @@ func calculateCRC(name string) (uint32, error) {
 	return h.Sum32(), nil
 }
 
-
 func listArchive(name string) {
 	f, err := os.Open(name)
 	if err != nil {
@@ -206,7 +237,7 @@ func listArchive(name string) {
 		return
 	}
 
-	fmt.Printf("Listing archive: [%s]\n\n", name)
+	fmt.Printf("Listing archive: [%s] (Version: ASD0%d)\n\n", name, header.Version)
 	fmt.Printf("Filename            filesize     Crc32     Date       Time       Attribute\n")
 	fmt.Println(strings.Repeat("-", 75))
 
@@ -267,12 +298,12 @@ func extractArchive(name string, testOnly bool) {
 	}
 
 	if testOnly {
-		fmt.Printf("Testing archive: [%s]\n", name)
+		fmt.Printf("Testing archive: [%s] (Version: ASD0%d)\n", name, header.Version)
 	} else {
-		fmt.Printf("Extracting archive: [%s]\n", name)
+		fmt.Printf("Extracting archive: [%s] (Version: ASD0%d)\n", name, header.Version)
 	}
 
-	err = header.Decompress(f, "test_out", testOnly)
+	err = header.Decompress(f, ".", testOnly)
 	if err != nil {
 		fmt.Printf("\nError during operation: %v\n", err)
 	} else {

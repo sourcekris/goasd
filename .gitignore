@@ -34,3 +34,7 @@ go.work.sum
 goasd.exe
 test_out/
 tests/
+hexdump.go
+decompiled/
+bin/
+test1/

@@ -19,6 +19,10 @@ const (
 
 // Decompress extracts files from the archive reader.
 func (h *ArchiveHeader) Decompress(r io.Reader, baseDir string, testOnly bool) error {
+	if h.Version == 2 {
+		return h.Decompress2(r, baseDir, testOnly) // Real 0.2.0 Adaptive Huffman
+	}
+
 	var asdExtraBuf [1]byte
 	if _, err := io.ReadFull(r, asdExtraBuf[:]); err != nil {
 		return err
