@@ -6,7 +6,8 @@ import (
 	"io"
 )
 
-const Signature = "ASD01\x1a"
+const Signature01 = "ASD01\x1a"
+const Signature02 = "ASD02\x1a"
 
 type FileEntry struct {
 	Name      string
@@ -17,7 +18,8 @@ type FileEntry struct {
 }
 
 type ArchiveHeader struct {
-	Files []FileEntry
+	Version int
+	Files   []FileEntry
 }
 
 // ReadHeader reads the ASD archive signature and file metadata list.
@@ -26,17 +28,34 @@ func ReadHeader(r io.Reader) (*ArchiveHeader, error) {
 	if _, err := io.ReadFull(r, sig); err != nil {
 		return nil, err
 	}
-	if string(sig) != Signature {
-		return nil, fmt.Errorf("not an ASD archive (invalid signature)")
+
+	var version int
+	if string(sig) == Signature01 {
+		version = 1
+	} else if string(sig) == Signature02 {
+		version = 2
+	} else {
+		return nil, fmt.Errorf("not an ASD archive (invalid signature: %q)", sig)
 	}
 
-	var numFiles uint16
-	if err := binary.Read(r, binary.LittleEndian, &numFiles); err != nil {
+	var numFilesLow uint16
+	if err := binary.Read(r, binary.LittleEndian, &numFilesLow); err != nil {
 		return nil, err
 	}
 
+	numFiles := uint32(numFilesLow)
+
+	if version == 2 {
+		var highByte uint8
+		if err := binary.Read(r, binary.LittleEndian, &highByte); err != nil {
+			return nil, err
+		}
+		numFiles += uint32(highByte) * 0x10000
+	}
+
 	header := &ArchiveHeader{
-		Files: make([]FileEntry, numFiles),
+		Version: version,
+		Files:   make([]FileEntry, numFiles),
 	}
 
 	for i := 0; i < int(numFiles); i++ {
@@ -75,13 +94,25 @@ func ReadHeader(r io.Reader) (*ArchiveHeader, error) {
 
 // WriteHeader writes the ASD archive signature and file metadata list.
 func (h *ArchiveHeader) WriteHeader(w io.Writer) error {
-	if _, err := w.Write([]byte(Signature)); err != nil {
+	sig := Signature01
+	if h.Version == 2 {
+		sig = Signature02
+	}
+
+	if _, err := w.Write([]byte(sig)); err != nil {
 		return err
 	}
 
 	numFiles := uint16(len(h.Files))
 	if err := binary.Write(w, binary.LittleEndian, numFiles); err != nil {
 		return err
+	}
+
+	if h.Version == 2 {
+		highByte := uint8((len(h.Files) >> 16) & 0xFF)
+		if err := binary.Write(w, binary.LittleEndian, highByte); err != nil {
+			return err
+		}
 	}
 
 	for _, entry := range h.Files {
