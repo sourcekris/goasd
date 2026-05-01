@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -43,7 +44,12 @@ func (h *ArchiveHeader) Decompress(r io.Reader, baseDir string, testOnly bool) e
 	// Helper to ensure the current file is open
 	ensureFileOpen := func() error {
 		if fileIdx < len(h.Files) && currentFile == nil && !testOnly {
-			path := filepath.Join(baseDir, h.Files[fileIdx].Name)
+			name := h.Files[fileIdx].Name
+			// Normalize separators: treat both / and \ as separators
+			name = strings.ReplaceAll(name, "\\", string(os.PathSeparator))
+			name = strings.ReplaceAll(name, "/", string(os.PathSeparator))
+
+			path := filepath.Join(baseDir, name)
 			if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 				return err
 			}
